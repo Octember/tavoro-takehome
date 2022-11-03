@@ -1,0 +1,39 @@
+
+module Order where
+
+
+template Order with
+    client: Party
+    warehouse: Party
+  where
+    signatory client
+
+    nonconsuming choice CreateReturnRequest : ContractId OrderReturnRequest
+      with reason: Text
+      controller client
+      do
+        create OrderReturnRequest
+            with client; warehouse; reason
+
+template OrderReturnRequest with
+    client: Party
+    warehouse: Party
+    reason: Text
+  where
+    signatory client
+    observer warehouse
+
+    nonconsuming choice Accept : ContractId ReturnAgreement
+      controller warehouse
+      do
+        create ReturnAgreement
+          with client; warehouse; reason
+
+template ReturnAgreement with
+    client: Party
+    warehouse: Party
+    reason: Text
+  where
+    signatory client, warehouse
+    
+        

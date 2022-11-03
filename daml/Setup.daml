@@ -1,0 +1,133 @@
+{-# LANGUAGE ApplicativeDo #-}
+
+module Setup where
+
+import DA.Optional (fromSomeNote)
+import qualified DA.Text as T
+import Daml.Script
+import Order
+
+-- | A record containing all the parties that we will use in our script
+data Parties = Parties
+  with
+    warehouse1: Party
+    warehouse2: Party
+    client1: Party
+    client2: Party
+    public: Party
+
+data Orders = Orders
+  with
+    order1: Order
+
+-- | A test user for the create-daml-app network.
+-- When a participantName is provided, the testUser will be created/or fetched
+-- on the given participant.
+data TestUser = TestUser with
+  alias : Text
+  public : Party
+  participantName: Optional ParticipantName
+
+defaultParticipant : Optional ParticipantName
+defaultParticipant = None
+-- | Create a public party, then create three test users.
+
+
+setupParties : Script Parties
+setupParties = do
+  public <- createPublic defaultParticipant
+  -- In the getting started guide, we only have one participant so we set the participant name to None.
+  -- If you are running this against a ledger with multiple participants, specify the participant the parties
+  -- should be hosted on.
+  client1 <- createTestUser $ TestUser "client1" public defaultParticipant
+  client2 <- createTestUser $ TestUser "client2" public defaultParticipant
+  warehouse1 <- createTestUser $ TestUser "warehouse1" public defaultParticipant
+  warehouse2 <- createTestUser $ TestUser "warehouse2" public defaultParticipant
+  pure $ Parties with
+    client1
+    client2
+    warehouse1
+    warehouse2
+    public
+
+
+setupOrders : Parties -> Script ()
+setupOrders parties = do
+
+  (order1) <- submit parties.client1 $ do
+    order1 <- createCmd (Order parties.client1 parties.warehouse1)
+    -- coinProposalBob <- createCmd (CoinProposal (Coin parties.bank parties.bob))
+    -- coinProposalBank <- createCmd (CoinProposal (Coin parties.bank parties.bank))
+    pure (order1)
+
+  -- order1 <-  create (Order (parties.client1 parties.warehouse1))
+  pure ()
+
+
+setup: Script ()
+setup = do
+  parties <- setupParties
+  orders <- setupOrders parties
+
+  pure ()
+
+
+-- createOrder : Party -> Party -> Script Order
+-- createOrder = clientParty warehouseParty do 
+--   order <- createCmd (Order (parties. warehouseParty))
+--   pure order
+
+
+-- | Create a test user.
+createTestUser : TestUser -> Script Party
+createTestUser TestUser{alias, public, participantName} = do
+  u <- getOrCreateUser alias (Some public) participantName
+  let p = getPrimaryParty u
+  pure p
+
+-- | Create the public party.
+createPublic : Optional ParticipantName -> Script Party
+createPublic participantName = do
+  publicUser <- getOrCreateUser "Public" None participantName
+  pure $ getPrimaryParty publicUser
+
+
+-- | Get a user by their id. If the user doesn't exist, it is created.
+getOrCreateUser : Text -> Optional Party -> Optional ParticipantName -> Script User
+getOrCreateUser alias publicM participantNameM = do
+  userId <- validateUserId $ toUserId alias
+  try
+    getUser_ userId participantNameM
+  catch
+    UserNotFound _ -> do
+      p <- allocateParty_ alias participantNameM
+      let u = User userId (Some p)
+      let rights  = CanActAs p :: [CanReadAs public | Some public <- [publicM]]
+      createUser_ u rights participantNameM
+      pure u
+
+getUser_ : UserId -> Optional ParticipantName -> Script User
+getUser_  userId participantNameM = do
+  case participantNameM of
+    Some participantName -> getUserOn userId participantName
+    None -> getUser userId
+
+allocateParty_ : Text -> Optional ParticipantName -> Script Party
+allocateParty_ alias participantNameM = do
+  case participantNameM of
+    Some participantName -> allocatePartyOn alias participantName
+    None -> allocateParty alias
+
+createUser_ : User -> [UserRight] ->  Optional ParticipantName -> Script ()
+createUser_ user rights participantNameM = do
+  case participantNameM of
+    Some participantName -> createUserOn user rights participantName
+    None -> createUser user rights
+
+-- | Convert a text to a valid user id.
+toUserId : Text -> Text
+toUserId = T.asciiToLower
+
+-- | Try to get the primary party of a user and fail if the user has no associated primary party.
+getPrimaryParty : User -> Party
+getPrimaryParty u = fromSomeNote ("User " <> userIdToText u.userId <> " is missing a primary party.") u.primaryParty
