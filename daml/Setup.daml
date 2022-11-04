@@ -56,11 +56,8 @@ setupOrders parties = do
 
   (order1) <- submit parties.client1 $ do
     order1 <- createCmd (Order parties.client1 parties.warehouse1)
-    -- coinProposalBob <- createCmd (CoinProposal (Coin parties.bank parties.bob))
-    -- coinProposalBank <- createCmd (CoinProposal (Coin parties.bank parties.bank))
     pure (order1)
 
-  -- order1 <-  create (Order (parties.client1 parties.warehouse1))
   pure ()
 
 
@@ -70,13 +67,6 @@ setup = do
   orders <- setupOrders parties
 
   pure ()
-
-
--- createOrder : Party -> Party -> Script Order
--- createOrder = clientParty warehouseParty do 
---   order <- createCmd (Order (parties. warehouseParty))
---   pure order
-
 
 -- | Create a test user.
 createTestUser : TestUser -> Script Party
